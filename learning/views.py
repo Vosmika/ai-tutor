@@ -68,17 +68,23 @@ def daily_quiz_home(request, subject_id):
         user=request.user,
         subject=subject,
         scheduled_date=today,
-        defaults={'is_locked': True}
+        defaults={'is_locked': False}
     )
 
-    # Daily quiz is pre-generated after main quiz submission.
-    # If not ready yet, show a friendly waiting state instead
-    # of making a blocking Gemini call.
+    # Generate quiz on demand if not already pre-generated.
+    # This only fires once per day — subsequent visits just read from DB.
     if daily.quiz is None:
-        return render(request, 'learning/daily_quiz.html', {
-            'subject': subject,
-            'not_ready': True,
-        })
+        from assessments.models import WeakTopic
+        from assessments.quiz_generator import generate_quiz
+        wt = list(WeakTopic.objects.filter(
+            user=request.user, subject=subject
+        ).values_list('topic_name', flat=True)[:5])
+        difficulty = 'focused on weak areas' if wt else 'mixed'
+        quiz = generate_quiz(subject, request.user, quiz_type='daily', num_questions=5, difficulty=difficulty)
+        if quiz:
+            daily.quiz = quiz
+            daily.is_locked = False
+            daily.save()
 
     if daily.is_completed:
         attempt = daily.quiz.attempts.filter(user=request.user).first() if daily.quiz else None
