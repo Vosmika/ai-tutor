@@ -11,8 +11,7 @@ def _configure():
 
 def get_model():
     _configure()
-    # gemini-2.0-flash has 15 RPM on the free tier vs 5 RPM for 2.5-flash
-    return genai.GenerativeModel('gemini-2.0-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 
 def generate_text(prompt: str) -> str:
