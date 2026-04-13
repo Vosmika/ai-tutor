@@ -102,61 +102,17 @@ def submit_quiz(request, quiz_id):
             obj.save()
 
     # Trigger adaptive content generation
+    # IMPORTANT: Only 1 Gemini call here (learning path).
+    # Flashcards → generated JIT when user visits flashcards page.
+    # Daily quiz → generated JIT when user visits daily quiz page.
+    # This keeps us well within the 5 RPM free tier limit.
     try:
-        import datetime
-        from learning.models import Flashcard, DailyQuiz
-        from assessments.models import WeakTopic
-        from assessments.quiz_generator import generate_quiz as gen_quiz
-
-        # Wipe stale flashcards (regenerated JIT on flashcard page visit)
+        from learning.models import Flashcard
+        # Wipe stale flashcards so they regenerate fresh on next visit
         Flashcard.objects.filter(user=request.user, subject=quiz.subject).delete()
 
-        # 1. Generate learning path (1 API call)
         from learning.generator import generate_learning_path
         generate_learning_path(request.user, quiz.subject)
-
-        # 2. Pre-generate today's daily quiz if not already done (1 API call)
-        # This way the daily quiz page loads instantly with no extra Gemini calls
-        today = datetime.date.today()
-
-        if quiz.quiz_type == 'daily':
-            # User finished today's daily quiz → pre-generate TOMORROW's quiz
-            # so it's ready at midnight without any page-load Gemini call
-            tomorrow = today + datetime.timedelta(days=1)
-            tomorrow_daily, _ = DailyQuiz.objects.get_or_create(
-                user=request.user,
-                subject=quiz.subject,
-                scheduled_date=tomorrow,
-                defaults={'is_locked': False}
-            )
-            if tomorrow_daily.quiz is None:
-                wt = list(WeakTopic.objects.filter(
-                    user=request.user, subject=quiz.subject
-                ).values_list('topic_name', flat=True)[:5])
-                difficulty = 'focused on weak areas' if wt else 'mixed'
-                dq = gen_quiz(quiz.subject, request.user, quiz_type='daily', num_questions=5, difficulty=difficulty)
-                if dq:
-                    tomorrow_daily.quiz = dq
-                    tomorrow_daily.is_locked = False
-                    tomorrow_daily.save()
-        else:
-            # User finished a basic/main quiz → pre-generate TODAY's daily quiz
-            daily, created = DailyQuiz.objects.get_or_create(
-                user=request.user,
-                subject=quiz.subject,
-                scheduled_date=today,
-                defaults={'is_locked': False}
-            )
-            if daily.quiz is None:
-                wt = list(WeakTopic.objects.filter(
-                    user=request.user, subject=quiz.subject
-                ).values_list('topic_name', flat=True)[:5])
-                difficulty = 'focused on weak areas' if wt else 'mixed'
-                dq = gen_quiz(quiz.subject, request.user, quiz_type='daily', num_questions=5, difficulty=difficulty)
-                if dq:
-                    daily.quiz = dq
-                    daily.is_locked = False
-                    daily.save()
     except Exception as e:
         print(f"Learning content generation error: {e}")
 
