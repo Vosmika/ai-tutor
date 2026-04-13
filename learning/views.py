@@ -19,8 +19,10 @@ def learning_path(request, subject_id):
     path = LearningPath.objects.filter(user=request.user, subject=subject).first()
     weak_topics = WeakTopic.objects.filter(user=request.user, subject=subject)
 
-    # Regenerate if requested
-    if request.method == 'POST' or path is None:
+    # Only regenerate on explicit POST (user clicked "Refresh").
+    # On first visit with no path, show a placeholder — the path gets
+    # created automatically when the user finishes a quiz.
+    if request.method == 'POST':
         generate_learning_path(request.user, subject)
         path = LearningPath.objects.filter(user=request.user, subject=subject).first()
         messages.success(request, 'Learning path updated!')

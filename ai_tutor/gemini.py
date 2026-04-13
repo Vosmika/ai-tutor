@@ -16,6 +16,7 @@ def get_model():
 
 def generate_text(prompt: str) -> str:
     """Generate a plain text response from Gemini."""
+    time.sleep(3)  # same rate-limit guard as generate_json
     model = get_model()
     response = model.generate_content(prompt)
     return response.text.strip()
