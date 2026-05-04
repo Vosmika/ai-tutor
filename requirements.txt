@@ -19,6 +19,7 @@ contourpy==1.3.3
 cryptography==46.0.5
 cycler==0.12.1
 distro==1.9.0
+dj-database-url==3.1.2
 Django==5.2.6
 django-cors-headers==4.9.0
 djangorestframework==3.16.1
@@ -90,6 +91,7 @@ pillow==11.3.0
 plyer==2.1.0
 proto-plus==1.27.1
 protobuf==5.29.6
+psycopg2-binary==2.9.12
 pyarrow==21.0.0
 pyasn1==0.6.3
 pyasn1_modules==0.4.2
@@ -102,6 +104,7 @@ PyJWT==2.12.1
 pyparsing==3.2.3
 pypiwin32==223
 python-dateutil==2.9.0.post0
+python-decouple==3.8
 pytz==2025.2
 pywin32==311
 PyYAML==6.0.3
@@ -141,4 +144,5 @@ watchdog==6.0.0
 websockets==16.0
 Werkzeug==3.1.3
 wheel==0.45.1
+whitenoise==6.12.0
 wrapt==1.17.3
