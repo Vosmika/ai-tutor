@@ -1,41 +1,67 @@
-import google.generativeai as genai
 import json
 import re
 import time
 from django.conf import settings
 
+# SAFE import (prevents crash if library issue happens)
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
+
 
 def _configure():
-    genai.configure(api_key=settings.GEMINI_API_KEY)
+    if genai is None:
+        return False
+    try:
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        return True
+    except Exception:
+        return False
 
 
 def get_model():
-    _configure()
-    return genai.GenerativeModel('gemini-2.5-flash')
+    if not _configure():
+        return None
+    try:
+        return genai.GenerativeModel('gemini-2.5-flash')
+    except Exception:
+        return None
 
 
 def generate_text(prompt: str) -> str:
     """Generate a plain text response from Gemini."""
-    time.sleep(3)  # same rate-limit guard as generate_json
+    time.sleep(3)
+
     model = get_model()
-    response = model.generate_content(prompt)
-    return response.text.strip()
+    if model is None:
+        return "AI service unavailable"
+
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception:
+        return "Error generating response"
 
 
 def generate_json(prompt: str) -> dict | list:
-    """
-    Generate a JSON response from Gemini.
-    Strips markdown code fences if present and parses JSON.
-    Includes a small delay to stay under RPM limits.
-    """
-    time.sleep(3)  # ~3s gap → max 20 calls/min, comfortably under 15 RPM
+    """Generate JSON safely from Gemini."""
+    time.sleep(3)
+
     model = get_model()
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    if model is None:
+        return {"error": "AI service unavailable"}
 
-    # Remove ```json ... ``` or ``` ... ``` fences
-    text = re.sub(r'^```(?:json)?\s*', '', text)
-    text = re.sub(r'\s*```$', '', text)
-    text = text.strip()
+    try:
+        response = model.generate_content(prompt)
+        text = response.text.strip()
 
-    return json.loads(text)
+        # Remove markdown ```json ```
+        text = re.sub(r'^```(?:json)?\s*', '', text)
+        text = re.sub(r'\s*```$', '', text)
+        text = text.strip()
+
+        return json.loads(text)
+
+    except Exception:
+        return {"error": "Invalid AI response"}
