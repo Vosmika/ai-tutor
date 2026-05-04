@@ -6,14 +6,15 @@ from django.http import JsonResponse
 from subjects.models import Subject
 from .models import Quiz, Question, QuizAttempt, WeakTopic
 from .quiz_generator import generate_quiz
-from ml_engine.predictor import predict_level
+
+# ❌ ML completely removed
+# from ml_engine.predictor import predict_level
 
 
 @login_required
 def start_basic_quiz(request, subject_id):
     subject = get_object_or_404(Subject, pk=subject_id, owner=request.user)
 
-    # Check if basic quiz already exists and is not completed
     existing = Quiz.objects.filter(
         subject=subject, user=request.user, quiz_type='basic', is_completed=False
     ).first()
@@ -21,10 +22,9 @@ def start_basic_quiz(request, subject_id):
     if existing:
         return redirect('assessments:take_quiz', quiz_id=existing.pk)
 
-    # Generate new quiz
     quiz = generate_quiz(subject, request.user, quiz_type='basic', num_questions=10)
     if quiz is None:
-        messages.error(request, 'Failed to generate quiz. Please check your Gemini API key and try again.')
+        messages.error(request, 'Failed to generate quiz. Please check your Gemini API key.')
         return redirect('subjects:detail', pk=subject_id)
 
     return redirect('assessments:take_quiz', quiz_id=quiz.pk)
@@ -33,11 +33,14 @@ def start_basic_quiz(request, subject_id):
 @login_required
 def take_quiz(request, quiz_id):
     quiz = get_object_or_404(Quiz, pk=quiz_id, user=request.user)
+
     if quiz.is_completed:
         attempt = quiz.attempts.filter(user=request.user).first()
         if attempt:
             return redirect('assessments:quiz_results', attempt_id=attempt.pk)
+
     questions = quiz.questions.all()
+
     return render(request, 'assessments/take_quiz.html', {
         'quiz': quiz,
         'questions': questions,
@@ -59,6 +62,7 @@ def submit_quiz(request, quiz_id):
     for question in questions:
         selected = request.POST.get(f'q_{question.pk}', '').lower()
         answers[str(question.pk)] = selected
+
         if selected == question.correct_answer:
             score += 1
         else:
@@ -68,8 +72,13 @@ def submit_quiz(request, quiz_id):
     total = questions.count()
     percentage = (score / total * 100) if total > 0 else 0
 
-    # ML prediction
-    skill_level = predict_level(percentage, score, total - score, total)
+    # ✅ ML REMOVED → simple logic instead
+    if percentage >= 80:
+        skill_level = "advanced"
+    elif percentage >= 50:
+        skill_level = "intermediate"
+    else:
+        skill_level = "beginner"
 
     # Update user skill level
     request.user.skill_level = skill_level
@@ -101,14 +110,9 @@ def submit_quiz(request, quiz_id):
             obj.miss_count += 1
             obj.save()
 
-    # Trigger adaptive content generation
-    # IMPORTANT: Only 1 Gemini call here (learning path).
-    # Flashcards → generated JIT when user visits flashcards page.
-    # Daily quiz → generated JIT when user visits daily quiz page.
-    # This keeps us well within the 5 RPM free tier limit.
+    # Adaptive learning (safe block)
     try:
         from learning.models import Flashcard
-        # Wipe stale flashcards so they regenerate fresh on next visit
         Flashcard.objects.filter(user=request.user, subject=quiz.subject).delete()
 
         from learning.generator import generate_learning_path
@@ -125,7 +129,6 @@ def quiz_results(request, attempt_id):
     questions = attempt.quiz.questions.all()
     weak_topics = WeakTopic.objects.filter(user=request.user, subject=attempt.quiz.subject)
 
-    # Build result detail per question
     question_results = []
     for q in questions:
         selected = attempt.answers.get(str(q.pk), '')
